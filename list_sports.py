@@ -1,31 +1,25 @@
-import os
-import requests
+name: List Football Competitions
 
-API_KEY = os.environ["ODDS_API_KEY"]
+on:
+  workflow_dispatch:
 
-url = "https://api.the-odds-api.com/v4/sports"
+jobs:
+  list:
+    runs-on: ubuntu-latest
 
-response = requests.get(
-    url,
-    params={"apiKey": API_KEY},
-    timeout=15
-)
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
 
-if response.status_code != 200:
-    print("ERREUR API :", response.status_code)
-    print(response.text)
-    exit()
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-sports = response.json()
+      - name: Installer les dépendances
+        run: pip install requests
 
-print("\n=== FOOTBALL DISPONIBLE ===\n")
-
-for sport in sports:
-    if "soccer" in sport["key"].lower():
-        print(
-            f'{sport["key"]} | '
-            f'{sport["title"]} | '
-            f'actif={sport["active"]}'
-        )
-
-print(f"\nNombre de compétitions football : {sum(1 for s in sports if "soccer" in s["key"].lower())}")
+      - name: Tester les compétitions
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python list_sports.py
