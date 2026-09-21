@@ -1,22 +1,40 @@
-name: List Football Competitions
+import os
+import json
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
 
-on:
-  workflow_dispatch:
+API_KEY = os.environ["ODDS_API_KEY"]
 
-jobs:
-  list:
-    runs-on: ubuntu-latest
+params = urlencode({
+    "apiKey": API_KEY
+})
 
-    steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v4
+url = f"https://api.the-odds-api.com/v4/sports?{params}"
 
-      - name: Installer Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+request = Request(
+    url,
+    headers={"User-Agent": "odds-drop-bot/1.0"}
+)
 
-      - name: Tester les compétitions
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: python list_sports.py
+try:
+    with urlopen(request, timeout=15) as response:
+        sports = json.loads(response.read().decode("utf-8"))
+
+except Exception as e:
+    print("ERREUR API :", e)
+    raise
+
+print("\n=== FOOTBALL DISPONIBLE ===\n")
+
+football = []
+
+for sport in sports:
+    if "soccer" in sport.get("key", "").lower():
+        football.append(sport)
+        print(
+            f'{sport["key"]} | '
+            f'{sport["title"]} | '
+            f'actif={sport["active"]}'
+        )
+
+print(f"\nNombre de compétitions football : {len(football)}")
