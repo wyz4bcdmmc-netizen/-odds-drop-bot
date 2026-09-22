@@ -3,21 +3,26 @@ import json
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHAT_ID = os.environ["CHAT_ID"]
-API_KEY = os.environ["ODDS_API_KEY"]
+print("=== DEMARRAGE DU BOT ===")
 
-# Compétition de test
+try:
+    API_KEY = os.environ["ODDS_API_KEY"]
+    BOT_TOKEN = os.environ["BOT_TOKEN"]
+    CHAT_ID = os.environ["CHAT_ID"]
+
+    print("✅ Les 3 secrets sont présents")
+
+except Exception as e:
+    print("❌ PROBLEME AVEC LES SECRETS :", e)
+    raise
+
+
 SPORT = "soccer_epl"
-
-# Marché : Over / Under
+REGION = "us"
 MARKET = "totals"
 
-# Région des bookmakers
-REGION = "us"
 
-
-def get_odds():
+try:
     params = urlencode({
         "apiKey": API_KEY,
         "regions": REGION,
@@ -27,85 +32,78 @@ def get_odds():
 
     url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/odds/?{params}"
 
+    print("📡 Connexion à Odds API...")
+
     request = Request(
         url,
-        headers={"User-Agent": "odds-drop-bot/1.0"}
+        headers={"User-Agent": "odds-drop-bot"}
     )
 
     with urlopen(request, timeout=20) as response:
-        return json.loads(response.read().decode())
+        data = response.read().decode("utf-8")
+
+    events = json.loads(data)
+
+    print("✅ Odds API fonctionne")
+    print("Nombre de matchs :", len(events))
 
 
-def send_telegram(message):
-    params = urlencode({
-        "chat_id": CHAT_ID,
-        "text": message
-    })
+except Exception as e:
+    print("❌ ERREUR ODDS API :", e)
+    raise
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?{params}"
 
-    request = Request(
-        url,
-        headers={"User-Agent": "odds-drop-bot/1.0"}
-    )
+message = "⚽ TEST ODDS API\n\n"
 
-    with urlopen(request, timeout=15) as response:
-        return response.read().decode()
+for event in events[:5]:
+
+    home = event.get("home_team", "?")
+    away = event.get("away_team", "?")
+
+    message += f"🏟️ {home} - {away}\n"
+
+    for bookmaker in event.get("bookmakers", []):
+
+        for market in bookmaker.get("markets", []):
+
+            if market.get("key") != "totals":
+                continue
+
+            for outcome in market.get("outcomes", []):
+
+                name = outcome.get("name")
+                point = outcome.get("point")
+                price = outcome.get("price")
+
+                message += f"{name} {point} → {price}\n"
+
+    message += "\n"
 
 
 try:
-    events = get_odds()
 
-    print(f"Nombre de matchs récupérés : {len(events)}")
+    telegram_url = (
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?"
+        + urlencode({
+            "chat_id": CHAT_ID,
+            "text": message
+        })
+    )
 
-    message = "⚽ TEST ODDS API\n\n"
+    print("📲 Envoi Telegram...")
 
-    if not events:
-        message += "❌ Aucun match disponible actuellement."
-    else:
-        for event in events[:5]:
-            home = event.get("home_team", "?")
-            away = event.get("away_team", "?")
+    request = Request(
+        telegram_url,
+        headers={"User-Agent": "odds-drop-bot"}
+    )
 
-            message += f"🏟️ {home} - {away}\n"
+    with urlopen(request, timeout=15) as response:
+        telegram_response = response.read().decode("utf-8")
 
-            bookmakers = event.get("bookmakers", [])
-
-            found = False
-
-            for bookmaker in bookmakers:
-                for market in bookmaker.get("markets", []):
-                    if market.get("key") != "totals":
-                        continue
-
-                    for outcome in market.get("outcomes", []):
-                        name = outcome.get("name")
-                        point = outcome.get("point")
-                        price = outcome.get("price")
-
-                        message += (
-                            f"  {name} {point} → {price}\n"
-                        )
-
-                        found = True
-
-            if not found:
-                message += "  Aucun Over/Under trouvé.\n"
-
-            message += "\n"
-
-    send_telegram(message)
-
-    print("Message Telegram envoyé.")
+    print("✅ Telegram fonctionne")
+    print(telegram_response)
 
 except Exception as e:
-    print("ERREUR :", e)
 
-    try:
-        send_telegram(
-            f"❌ ERREUR DU BOT\n\n{e}"
-        )
-    except Exception:
-        pass
-
+    print("❌ ERREUR TELEGRAM :", e)
     raise
